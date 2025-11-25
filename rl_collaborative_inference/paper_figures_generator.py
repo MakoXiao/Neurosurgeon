@@ -33,7 +33,7 @@ class PaperFigureGenerator:
         os.makedirs(output_dir, exist_ok=True)
         
         # Models to evaluate
-        self.models = ['AlexNet', 'VGG-11', 'ResNet-18', 'MobileNet-V2']
+        self.models = ['AlexNet', 'VGG-11', 'ResNet-18', 'MobileNet-V2', 'ResNet-34']
         
         # Network speeds (MB/s)
         self.network_speeds = [5.0, 10.0, 20.0, 50.0]
@@ -61,13 +61,15 @@ class PaperFigureGenerator:
                 'AlexNet': 245.0,
                 'VGG-11': 320.0,
                 'ResNet-18': 180.0,
-                'MobileNet-V2': 150.0
+                'MobileNet-V2': 150.0,
+                'ResNet-34': 220.0  # Add 5th model
             }
             base_accuracy = {
                 'AlexNet': 0.852,
                 'VGG-11': 0.875,
                 'ResNet-18': 0.890,
-                'MobileNet-V2': 0.865
+                'MobileNet-V2': 0.865,
+                'ResNet-34': 0.895  # Add 5th model
             }
             
             # Network speed results
@@ -189,45 +191,64 @@ class PaperFigureGenerator:
         plt.close()
     
     def plot_figure12_style(self, data):
-        """Plot latency vs network bandwidth (Figure 12 style)"""
-        model_name = self.models[0]  # Use first model
-        network_results = data[model_name]['network_speeds']
+        """Plot latency vs network bandwidth (Figure 12 style) for multiple models"""
+        # Select 5 models: AlexNet, VGG-11, ResNet-18, MobileNet-V2, ResNet-34
+        models_to_plot = ['AlexNet', 'VGG-11', 'ResNet-18', 'MobileNet-V2', 'ResNet-34']
+        num_models = len(models_to_plot)
         
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Create subplots: 1 row, num_models columns
+        fig, axes = plt.subplots(1, num_models, figsize=(6*num_models, 5))
+        if num_models == 1:
+            axes = [axes]
         
+        # Get network speeds from first model (all models should have same speeds)
+        first_model_results = data[models_to_plot[0]]['network_speeds']
         network_speeds = sorted([float(speed.replace('MB/s', '')) 
-                                for speed in network_results.keys()])
+                                for speed in first_model_results.keys()])
         
-        for method_key, method_info in self.methods.items():
-            latencies = []
-            std_latencies = []
-            valid_speeds = []
+        # Plot for each model
+        for idx, model_name in enumerate(models_to_plot):
+            ax = axes[idx]
+            network_results = data[model_name]['network_speeds']
             
-            for speed in network_speeds:
-                speed_key = f'{speed}MB/s'
-                if speed_key in network_results and method_key in network_results[speed_key]:
-                    valid_speeds.append(speed)
-                    latencies.append(network_results[speed_key][method_key]['latency'])
-                    std_latencies.append(network_results[speed_key][method_key]['std_latency'])
+            # Plot each method
+            for method_key, method_info in self.methods.items():
+                latencies = []
+                std_latencies = []
+                valid_speeds = []
+                
+                for speed in network_speeds:
+                    speed_key = f'{speed}MB/s'
+                    if speed_key in network_results and method_key in network_results[speed_key]:
+                        valid_speeds.append(speed)
+                        latencies.append(network_results[speed_key][method_key]['latency'])
+                        std_latencies.append(network_results[speed_key][method_key]['std_latency'])
+                
+                if valid_speeds:
+                    ax.plot(valid_speeds, latencies, marker=method_info['marker'], 
+                           color=method_info['color'], label=method_info['label'], 
+                           linewidth=2.5, markersize=10, alpha=0.9, zorder=3)
+                    ax.fill_between(valid_speeds, 
+                                  [l - s for l, s in zip(latencies, std_latencies)],
+                                  [l + s for l, s in zip(latencies, std_latencies)],
+                                  color=method_info['color'], alpha=0.15, zorder=1)
             
-            if valid_speeds:
-                ax.plot(valid_speeds, latencies, marker=method_info['marker'], 
-                       color=method_info['color'], label=method_info['label'], 
-                       linewidth=2.5, markersize=10, alpha=0.9, zorder=3)
-                ax.fill_between(valid_speeds, 
-                              [l - s for l, s in zip(latencies, std_latencies)],
-                              [l + s for l, s in zip(latencies, std_latencies)],
-                              color=method_info['color'], alpha=0.15, zorder=1)
+            # Set labels and title for each subplot
+            ax.set_xlabel('Network Bandwidth (MB/s)', fontsize=12, fontweight='bold')
+            if idx == 0:
+                ax.set_ylabel('Latency (ms)', fontsize=12, fontweight='bold')
+            ax.set_title(f'({chr(97+idx)}) {model_name}', fontsize=14, fontweight='bold')
+            ax.grid(alpha=0.3, linestyle='--', zorder=0)
+            
+            # Add legend to each subplot
+            ax.legend(loc='best', fontsize=9, framealpha=0.9)
         
-        ax.set_xlabel('Network Bandwidth (MB/s)', fontsize=14, fontweight='bold')
-        ax.set_ylabel('Latency (ms)', fontsize=14, fontweight='bold')
-        ax.set_title('Latency vs Network Bandwidth', fontsize=16, fontweight='bold')
-        ax.legend(loc='best', fontsize=11, framealpha=0.9)
-        ax.grid(alpha=0.3, linestyle='--', zorder=0)
+        # Add overall title
+        fig.suptitle('Latency vs Network Bandwidth', fontsize=16, fontweight='bold', y=1.02)
         
         plt.tight_layout()
         plt.savefig(os.path.join(self.output_dir, 'Fig12_Network_Bandwidth.png'))
-        print(f"Saved Figure 12 style: Network bandwidth impact")
+        print(f"Saved Figure 12 style: Network bandwidth impact (with {num_models} models)")
         plt.close()
     
     def plot_accuracy_latency_tradeoff(self, data):
@@ -346,11 +367,12 @@ class PaperFigureGenerator:
     
     def plot_multi_model_comparison(self, data):
         """Plot comparison across multiple models"""
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         
-        methods_to_plot = ['Neurosurgeon', 'Baseline_0.5', 'RL_Method']
+        # Include all 4 methods: Neurosurgeon, Baseline_0.5, Baseline_0.7, RL_Method
+        methods_to_plot = ['Neurosurgeon', 'Baseline_0.5', 'Baseline_0.7', 'RL_Method']
         x = np.arange(len(self.models))
-        width = 0.25
+        width = 0.2  # Adjust width for 4 methods
         
         # Accuracy comparison
         for i, method in enumerate(methods_to_plot):
@@ -359,7 +381,8 @@ class PaperFigureGenerator:
                 acc = data[model]['network_speeds']['10.0MB/s'][method]['accuracy']
                 accuracies.append(acc)
             
-            offset = (i - 1) * width
+            # Center the bars: offset from center for 4 methods
+            offset = (i - 1.5) * width
             bars = ax1.bar(x + offset, accuracies, width, 
                           label=self.methods[method]['label'],
                           color=self.methods[method]['color'],
@@ -388,7 +411,8 @@ class PaperFigureGenerator:
                 lat = data[model]['network_speeds']['10.0MB/s'][method]['latency']
                 latencies.append(lat)
             
-            offset = (i - 1) * width
+            # Center the bars: offset from center for 4 methods
+            offset = (i - 1.5) * width
             bars = ax2.bar(x + offset, latencies, width,
                           label=self.methods[method]['label'],
                           color=self.methods[method]['color'],
