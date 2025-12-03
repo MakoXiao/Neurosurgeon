@@ -74,7 +74,14 @@ class PPO:
         :param deterministic: whether to use deterministic action
         :return: action, log_prob, value
         """
-        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        if isinstance(state, torch.Tensor):
+            state_tensor = state.unsqueeze(0) if state.dim() == 1 else state
+        else:
+            state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        
+        # 确保state tensor在actor所在的设备上
+        device = next(self.actor.parameters()).device
+        state_tensor = state_tensor.to(device)
         
         # Get action from actor
         action = self.actor.select_action(state_tensor, deterministic=deterministic)

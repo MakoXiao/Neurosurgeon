@@ -132,25 +132,39 @@ class PruningManager:
         :return: pruned_feature, pruning_info
         """
         compression_rate = max(0.1, min(1.0, compression_rate))
-        
-        if self.pruning_type == 'structured':
-            pruned_feature, mask, indices = self.pruner.prune(feature_tensor, compression_rate)
+
+        # 对于非 4 维特征（例如全连接层输出 [B, C]），剪枝逻辑会比较复杂，
+        # 为了保持稳定性，这里直接跳过剪枝，仅记录一个“identity” 类型，
+        # 在 decompress 中原样返回即可。
+        if feature_tensor.dim() != 4:
+            pruned_feature = feature_tensor
+            mask = torch.ones_like(feature_tensor, dtype=torch.bool, device=feature_tensor.device)
             pruning_info = {
                 'mask': mask,
-                'indices': indices,
+                'indices': None,
                 'original_shape': feature_tensor.shape,
-                'pruning_type': 'structured',
-                'compression_rate': compression_rate
+                'pruning_type': 'identity',
+                'compression_rate': 1.0
             }
         else:
-            pruned_feature, mask, indices = self.pruner.prune(feature_tensor, compression_rate)
-            pruning_info = {
-                'mask': mask,
-                'indices': indices,
-                'original_shape': feature_tensor.shape,
-                'pruning_type': 'unstructured',
-                'compression_rate': compression_rate
-            }
+            if self.pruning_type == 'structured':
+                pruned_feature, mask, indices = self.pruner.prune(feature_tensor, compression_rate)
+                pruning_info = {
+                    'mask': mask,
+                    'indices': indices,
+                    'original_shape': feature_tensor.shape,
+                    'pruning_type': 'structured',
+                    'compression_rate': compression_rate
+                }
+            else:
+                pruned_feature, mask, indices = self.pruner.prune(feature_tensor, compression_rate)
+                pruning_info = {
+                    'mask': mask,
+                    'indices': indices,
+                    'original_shape': feature_tensor.shape,
+                    'pruning_type': 'unstructured',
+                    'compression_rate': compression_rate
+                }
         
         return pruned_feature, pruning_info
     
@@ -162,7 +176,10 @@ class PruningManager:
         :param device: device
         :return: recovered feature
         """
-        if pruning_info['pruning_type'] == 'structured':
+        if pruning_info['pruning_type'] == 'identity':
+            # 非 4D 情况下未做实际剪枝，直接返回原特征
+            recovered = pruned_feature
+        elif pruning_info['pruning_type'] == 'structured':
             original_channels = pruning_info['original_shape'][1]
             recovered = self.pruner.recover(
                 pruned_feature,

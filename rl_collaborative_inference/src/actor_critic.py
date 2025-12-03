@@ -119,15 +119,33 @@ class Actor(nn.Module):
         :return: log_prob, entropy
         """
         prob_partition, (compression_mu, compression_sigma) = self.forward(state)
-        
+
+        # 将 Python 标量动作转换为张量，保证与分布接口兼容
+        if isinstance(action["partition_point"], torch.Tensor):
+            partition_action = action["partition_point"]
+        else:
+            partition_action = torch.tensor(
+                action["partition_point"],
+                dtype=torch.long,
+                device=prob_partition.device,
+            )
+        if isinstance(action["compression_rate"], torch.Tensor):
+            compression_action = action["compression_rate"]
+        else:
+            compression_action = torch.tensor(
+                action["compression_rate"],
+                dtype=torch.float32,
+                device=prob_partition.device,
+            )
+
         # Partition point
         dist_partition = Categorical(prob_partition)
-        partition_log_prob = dist_partition.log_prob(action['partition_point'])
+        partition_log_prob = dist_partition.log_prob(partition_action)
         partition_entropy = dist_partition.entropy()
         
         # Compression rate
         dist_compression = Normal(compression_mu, compression_sigma)
-        compression_log_prob = dist_compression.log_prob(action['compression_rate'])
+        compression_log_prob = dist_compression.log_prob(compression_action)
         compression_entropy = dist_compression.entropy()
         
         # Total log probability
