@@ -66,20 +66,26 @@ class CollaborativeInferenceEnv:
             'accuracy_window': []
         }
         
-        # Dataset iterator
-        self.dataset_iter = iter(dataset)
+        # Dataset iterator with random sampling
+        import random
+        self.dataset_indices = list(range(len(dataset)))
+        random.shuffle(self.dataset_indices)
+        self.current_idx = 0
         self.current_sample = None
         self.current_label = None
         
     def reset(self):
         """Reset environment"""
-        # Get new sample
-        try:
-            sample, label = next(self.dataset_iter)
-        except StopIteration:
-            self.dataset_iter = iter(self.dataset)
-            sample, label = next(self.dataset_iter)
+        # Get new sample using shuffled indices
+        idx = self.dataset_indices[self.current_idx]
+        self.current_idx = (self.current_idx + 1) % len(self.dataset_indices)
         
+        # If we've gone through all samples, reshuffle
+        if self.current_idx == 0:
+            import random
+            random.shuffle(self.dataset_indices)
+        
+        sample, label = self.dataset[idx]
         self.current_sample = sample.unsqueeze(0) if sample.dim() == 3 else sample
         self.current_label = label
         
@@ -154,7 +160,33 @@ class CollaborativeInferenceEnv:
         
         # Calculate accuracy
         pred = torch.argmax(cloud_output, dim=1)
-        accuracy = (pred == self.current_label).float().item()
+        # Ensure label is a tensor and on the same device
+        if isinstance(self.current_label, (int, np.integer, torch.Tensor)):
+            if isinstance(self.current_label, torch.Tensor):
+                label_tensor = self.current_label.to(pred.device)
+            else:
+                label_tensor = torch.tensor([self.current_label], device=pred.device, dtype=torch.long)
+        else:
+            label_tensor = torch.tensor([self.current_label], device=pred.device, dtype=torch.long)
+        if label_tensor.dim() == 0:
+            label_tensor = label_tensor.unsqueeze(0)
+        # Ensure same shape
+        if pred.shape != label_tensor.shape:
+            if label_tensor.numel() == 1:
+                label_tensor = label_tensor.expand_as(pred)
+        
+        # Debug: check if shapes match
+        if pred.shape != label_tensor.shape:
+            # Try to fix shape mismatch
+            if pred.numel() == 1 and label_tensor.numel() == 1:
+                pred = pred.view(1)
+                label_tensor = label_tensor.view(1)
+            elif pred.numel() > 1 and label_tensor.numel() == 1:
+                label_tensor = label_tensor.expand_as(pred)
+            elif pred.numel() == 1 and label_tensor.numel() > 1:
+                pred = pred.expand_as(label_tensor)
+        
+        accuracy = (pred == label_tensor).float().item()
         
         # Calculate reward
         reward = self._compute_reward(accuracy, total_latency)

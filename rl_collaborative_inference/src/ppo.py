@@ -74,7 +74,9 @@ class PPO:
         :param deterministic: whether to use deterministic action
         :return: action, log_prob, value
         """
-        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        # Get device from actor model
+        device = next(self.actor.parameters()).device
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
         
         # Get action from actor
         action = self.actor.select_action(state_tensor, deterministic=deterministic)
@@ -93,41 +95,116 @@ class PPO:
         :param batch_size: batch size
         """
         if len(self.buffer) < batch_size:
-            return
+            return None
         
         # Sample batch
         batch = self.buffer.sample(batch_size)
         
-        # Convert to tensors
-        states = torch.FloatTensor([b['state'] for b in batch])
+        # Get device from actor model
+        device = next(self.actor.parameters()).device
+        
+        # Convert to tensors and move to correct device
+        # Ensure states are properly shaped as [batch_size, state_dim]
+        state_list = []
+        for b in batch:
+            s = b['state']
+            # Convert to numpy array first if needed
+            if isinstance(s, torch.Tensor):
+                s = s.cpu().numpy()
+            elif not isinstance(s, np.ndarray):
+                s = np.array(s)
+            # Flatten to 1D if needed
+            s = s.flatten()
+            state_list.append(s)
+        
+        # Convert to tensor and ensure 2D shape [batch_size, state_dim]
+        states = torch.FloatTensor(np.array(state_list)).to(device)
+        if states.dim() == 1:
+            states = states.unsqueeze(0)
+        
         actions = [b['action'] for b in batch]
-        rewards = torch.FloatTensor([b['reward'] for b in batch])
-        next_states = torch.FloatTensor([b['next_state'] for b in batch])
-        dones = torch.FloatTensor([b['done'] for b in batch])
-        old_log_probs = torch.FloatTensor([b['log_prob'] for b in batch])
-        old_values = torch.FloatTensor([b['value'] for b in batch])
+        rewards = torch.FloatTensor([b['reward'] for b in batch]).to(device)
+        # Handle next_states similarly
+        next_states_list = []
+        for b in batch:
+            s = b['next_state']
+            if isinstance(s, torch.Tensor):
+                s = s.cpu().numpy()
+            elif not isinstance(s, np.ndarray):
+                s = np.array(s)
+            s = s.flatten()
+            next_states_list.append(s)
+        next_states = torch.FloatTensor(np.array(next_states_list)).to(device)
+        if next_states.dim() == 1:
+            next_states = next_states.unsqueeze(0)
+        
+        dones = torch.FloatTensor([b['done'] for b in batch]).to(device)
+        old_log_probs = torch.FloatTensor([b['log_prob'] for b in batch]).to(device)
+        old_values = torch.FloatTensor([b['value'] for b in batch]).to(device)
+        
+        # Check for NaN or Inf values
+        if torch.isnan(states).any() or torch.isinf(states).any():
+            print(f"Warning: NaN or Inf values in states, skipping update")
+            self.buffer.clear()
+            return None
         
         # Compute returns and advantages
         returns, advantages = self._compute_gae(rewards, dones, old_values)
         
         # Normalize advantages
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if advantages.std() > 1e-8:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         
         # Update for k epochs
+        avg_critic_loss = 0.0
         for _ in range(self.k_epochs):
             # Evaluate actions
             new_log_probs = []
             entropies = []
-            for i, state in enumerate(states):
-                log_prob, entropy = self.actor.evaluate_action(state.unsqueeze(0), actions[i])
+            for i in range(len(states)):
+                # Get single state and ensure it's 2D [1, state_dim]
+                state = states[i:i+1]  # Keep batch dimension
+                log_prob, entropy = self.actor.evaluate_action(state, actions[i])
                 new_log_probs.append(log_prob)
                 entropies.append(entropy)
             
             new_log_probs = torch.stack(new_log_probs).squeeze()
             entropies = torch.stack(entropies).squeeze()
             
-            # Compute new values
-            new_values = self.critic(states).squeeze()
+            # Compute new values - states should already be 2D [batch_size, state_dim]
+            # Verify states shape before passing to critic
+            if states.dim() != 2:
+                print(f"Error: states has wrong dimension: {states.shape}, expected 2D")
+                self.buffer.clear()
+                return None
+            
+            # Verify state_dim matches critic network input size
+            expected_state_dim = self.critic.net[0].in_features
+            if states.shape[1] != expected_state_dim:
+                print(f"Error: states shape mismatch: got {states.shape[1]}, expected {expected_state_dim}")
+                self.buffer.clear()
+                return None
+            
+            # Check for invalid values before CUDA operation
+            if torch.isnan(states).any() or torch.isinf(states).any():
+                print(f"Warning: NaN or Inf in states before critic, skipping")
+                continue
+            
+            # Clamp states to reasonable range to avoid numerical issues
+            states = torch.clamp(states, -10.0, 10.0)
+            
+            try:
+                new_values = self.critic(states)
+                if new_values.dim() > 1:
+                    new_values = new_values.squeeze()
+            except RuntimeError as e:
+                print(f"CUDA error in critic forward: {e}")
+                print(f"States shape: {states.shape}, dtype: {states.dtype}, device: {states.device}")
+                if states.numel() > 0:
+                    print(f"States stats: min={states.min().item():.4f}, max={states.max().item():.4f}, mean={states.mean().item():.4f}")
+                # Clear buffer and return to avoid further errors
+                self.buffer.clear()
+                return None
             
             # Compute ratios
             ratios = torch.exp(new_log_probs - old_log_probs)
@@ -141,6 +218,7 @@ class PPO:
             
             # Critic loss
             critic_loss = F.mse_loss(new_values, returns)
+            avg_critic_loss += critic_loss.item()
             
             # Update networks
             self.optimizer_actor.zero_grad()
@@ -155,6 +233,16 @@ class PPO:
         
         # Clear buffer
         self.buffer.clear()
+        
+        return avg_critic_loss / self.k_epochs
+    
+    def update_with_loss(self, batch_size=64):
+        """
+        Update policy and return value loss
+        :param batch_size: batch size
+        :return: average value loss
+        """
+        return self.update(batch_size)
     
     def _compute_gae(self, rewards, dones, values, next_value=0):
         """
