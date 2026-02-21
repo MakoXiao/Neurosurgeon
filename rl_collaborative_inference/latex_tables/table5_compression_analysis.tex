@@ -1,0 +1,25 @@
+\begin{table}[htbp]
+\centering
+\caption{Impact of Compression Rate on Performance}
+\label{tab:compression_analysis}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Method} & \textbf{Compression} & \textbf{Accuracy (\%)} & \textbf{Latency (ms)} \\
+\midrule
+\multirow{3}{*}{AlexNet}
+ & Neurosurgeon & 1.0 & 97.0 & 59.74 \\
+& Baseline-0.5 & 0.5 & 97.0 & 36.28 \\
+& Baseline-0.7 & 0.7 & 97.0 & 45.20 \\
+\midrule
+\multirow{3}{*}{VGG-11}
+ & Neurosurgeon & 1.0 & 98.0 & 168.47 \\
+& Baseline-0.5 & 0.5 & 98.0 & 91.78 \\
+& Baseline-0.7 & 0.7 & 98.0 & 121.85 \\
+\midrule
+\multirow{3}{*}{MobileNet-V2}
+ & Neurosurgeon & 1.0 & 99.0 & 61.17 \\
+& Baseline-0.5 & 0.5 & 96.0 & 51.84 \\
+& Baseline-0.7 & 0.7 & 98.0 & 55.82 \\
+\bottomrule
+\end{tabular}
+\end{table}

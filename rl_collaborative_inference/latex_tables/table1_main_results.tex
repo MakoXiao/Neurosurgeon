@@ -1,0 +1,34 @@
+\begin{table}[htbp]
+\centering
+\caption{Performance Comparison at 10 MB/s Network Bandwidth}
+\label{tab:main_results}
+\begin{tabular}{llcc}
+\toprule
+\textbf{Model} & \textbf{Method} & \textbf{Accuracy (\%)} & \textbf{Latency (ms)} \\
+\midrule
+\multirow{6}{*}{AlexNet}
+ & All-Edge & $97.0 \pm 17.1$ & $30.50 \pm 7.70$ \\
+& All-Cloud & $97.0 \pm 17.1$ & $58.01 \pm 0.04$ \\
+& Neurosurgeon & $97.0 \pm 17.1$ & $59.74 \pm 0.61$ \\
+& Baseline-0.5 & $97.0 \pm 17.1$ & $36.28 \pm 4.02$ \\
+& Baseline-0.7 & $97.0 \pm 17.1$ & $45.20 \pm 1.66$ \\
+& Best-Partition & $97.0 \pm 17.1$ & $21.88 \pm 2.74$ \\
+\midrule
+\multirow{6}{*}{VGG-11}
+ & All-Edge & $98.0 \pm 14.0$ & $49.30 \pm 14.97$ \\
+& All-Cloud & $98.0 \pm 14.0$ & $58.35 \pm 0.05$ \\
+& Neurosurgeon & $98.0 \pm 14.0$ & $168.47 \pm 0.56$ \\
+& Baseline-0.5 & $98.0 \pm 14.0$ & $91.78 \pm 0.40$ \\
+& Baseline-0.7 & $98.0 \pm 14.0$ & $121.85 \pm 0.40$ \\
+& Best-Partition & $98.0 \pm 14.0$ & $47.89 \pm 0.66$ \\
+\midrule
+\multirow{6}{*}{MobileNet-V2}
+ & All-Edge & $99.0 \pm 9.9$ & $121.56 \pm 0.78$ \\
+& All-Cloud & $99.0 \pm 9.9$ & $59.86 \pm 0.02$ \\
+& Neurosurgeon & $99.0 \pm 9.9$ & $61.17 \pm 0.59$ \\
+& Baseline-0.5 & $96.0 \pm 19.6$ & $51.84 \pm 0.89$ \\
+& Baseline-0.7 & $98.0 \pm 14.0$ & $55.82 \pm 1.43$ \\
+& Best-Partition & $99.0 \pm 9.9$ & $120.17 \pm 1.46$ \\
+\bottomrule
+\end{tabular}
+\end{table}

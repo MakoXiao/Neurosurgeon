@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\caption{Best Method Selection for Different Scenarios}
+\label{tab:best_methods}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Best Latency} & \textbf{Best Accuracy} & \textbf{Best Balance} & \textbf{Improvement} \\
+\midrule
+AlexNet & Best-Partition (21.88ms) & All-Edge (97.0\%) & Best-Partition & $63.4\%$ \\
+VGG-11 & Best-Partition (47.89ms) & All-Edge (98.0\%) & Best-Partition & $71.6\%$ \\
+MobileNet-V2 & Baseline-0.5 (51.84ms) & All-Edge (99.0\%) & Best-Partition & $-96.4\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}

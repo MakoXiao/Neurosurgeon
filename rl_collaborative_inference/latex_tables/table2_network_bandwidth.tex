@@ -1,0 +1,34 @@
+\begin{table}[htbp]
+\centering
+\caption{Latency Comparison Across Network Bandwidths (ms)}
+\label{tab:network_bandwidth}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Model} & \textbf{Method} & \textbf{5 MB/s} & \textbf{10 MB/s} & \textbf{20 MB/s} & \textbf{50 MB/s} \\
+\midrule
+\multirow{6}{*}{AlexNet}
+ & All-Edge & $30.55$ & $30.50$ & $29.98$ & $26.52$ \\
+& All-Cloud & $115.49$ & $58.01$ & $29.29$ & $12.02$ \\
+& Neurosurgeon & $110.34$ & $59.74$ & $34.95$ & $19.37$ \\
+& Baseline-0.5 & $60.70$ & $36.28$ & $23.00$ & $14.08$ \\
+& Baseline-0.7 & $82.97$ & $45.20$ & $26.29$ & $16.30$ \\
+& Best-Partition & $25.45$ & $21.88$ & $18.83$ & $17.73$ \\
+\midrule
+\multirow{6}{*}{VGG-11}
+ & All-Edge & $47.69$ & $49.30$ & $52.04$ & $43.41$ \\
+& All-Cloud & $115.77$ & $58.35$ & $29.66$ & $12.44$ \\
+& Neurosurgeon & $322.00$ & $168.47$ & $92.32$ & $46.09$ \\
+& Baseline-0.5 & $168.32$ & $91.78$ & $54.00$ & $30.95$ \\
+& Baseline-0.7 & $228.23$ & $121.85$ & $69.24$ & $36.82$ \\
+& Best-Partition & $57.32$ & $47.89$ & $40.99$ & $40.39$ \\
+\midrule
+\multirow{6}{*}{MobileNet-V2}
+ & All-Edge & $122.86$ & $121.56$ & $122.70$ & $114.79$ \\
+& All-Cloud & $117.52$ & $59.86$ & $31.16$ & $13.78$ \\
+& Neurosurgeon & $80.95$ & $61.17$ & $51.93$ & $43.43$ \\
+& Baseline-0.5 & $62.10$ & $51.84$ & $47.06$ & $41.54$ \\
+& Baseline-0.7 & $68.35$ & $55.82$ & $47.82$ & $42.22$ \\
+& Best-Partition & $121.37$ & $120.17$ & $111.68$ & $111.64$ \\
+\bottomrule
+\end{tabular}
+\end{table}

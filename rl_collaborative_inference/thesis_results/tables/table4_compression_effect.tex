@@ -1,0 +1,18 @@
+\begin{table*}[htbp]
+\centering
+\caption{Effect of Compression Strategy on Accuracy and Latency (10\,MB/s)}
+\label{tab:compression}
+\begin{tabular}{lcccccccccc}
+\toprule
+\textbf{Method} & \multicolumn{2}{c}{\textbf{AlexNet}} & \multicolumn{2}{c}{\textbf{VGG-16}} & \multicolumn{2}{c}{\textbf{ResNet-18}} & \multicolumn{2}{c}{\textbf{MobileNet-V2}} & \multicolumn{2}{c}{\textbf{ResNet-50}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
+& Acc. & Lat. & Acc. & Lat. & Acc. & Lat. & Acc. & Lat. & Acc. & Lat. \\
+\midrule
+Neurosurgeon & $57.4$ & $21.6$ & $63.0$ & $65.8$ & $79.7$ & $32.4$ & $71.0$ & $45.6$ & $82.0$ & $69.1$ \\
+Compress-0.7 & $56.5$ & $17.2$ & $62.3$ & $55.9$ & $78.4$ & $26.7$ & $67.4$ & $44.1$ & $80.9$ & $67.9$ \\
+Compress-0.5 & $54.4$ & $14.7$ & $60.8$ & $50.7$ & $75.2$ & $24.5$ & $59.0$ & $41.7$ & $78.2$ & $58.7$ \\
+Compress-0.3 & $49.0$ & $12.5$ & $56.7$ & $43.6$ & $67.1$ & $21.1$ & $56.8$ & $43.0$ & $71.5$ & $58.4$ \\
+\textbf{RL-Method} & $56.5$ & $15.1$ & $62.3$ & $56.9$ & $78.4$ & $25.3$ & $69.2$ & $37.4$ & $82.0$ & $64.7$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
