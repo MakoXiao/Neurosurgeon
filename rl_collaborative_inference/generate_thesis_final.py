@@ -319,7 +319,8 @@ def fig2_accuracy_bar(data):
 
 # ── Figure 3: Latency vs Bandwidth (line chart, all models) ──────────────────
 def fig3_latency_vs_bw(data):
-    key = ['All-Edge', 'All-Cloud', 'Neurosurgeon', 'Baseline-0.5', 'ARL-Comp']
+    key = ['All-Edge', 'All-Cloud', 'Neurosurgeon',
+           'Baseline-0.3', 'Baseline-0.5', 'Baseline-0.7', 'ARL-Comp']
     fig, axes = plt.subplots(1, 5, figsize=(24, 5), sharey=False)
     for ax, mn in zip(axes, MODELS):
         for m in key:
