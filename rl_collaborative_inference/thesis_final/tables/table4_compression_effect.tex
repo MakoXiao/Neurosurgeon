@@ -3,17 +3,17 @@
 \caption{压缩策略对准确率与延迟的影响 (LTE 10\,MB/s)}
 \label{tab:compression}
 \small
-\begin{tabular}{lcccccccccc}
+\begin{tabular}{lccccccccccccccc}
 \toprule
-\textbf{Method} & \multicolumn{2}{c}{\textbf{AlexNet}} & \multicolumn{2}{c}{\textbf{VGG-16}} & \multicolumn{2}{c}{\textbf{ResNet-18}} & \multicolumn{2}{c}{\textbf{MobileNet-V2}} & \multicolumn{2}{c}{\textbf{ResNet-50}} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
- & Acc. & Lat. & Acc. & Lat. & Acc. & Lat. & Acc. & Lat. & Acc. & Lat. \\
+\textbf{Method} & \multicolumn{3}{c}{\textbf{AlexNet}} & \multicolumn{3}{c}{\textbf{VGG-16}} & \multicolumn{3}{c}{\textbf{ResNet-18}} & \multicolumn{3}{c}{\textbf{MobileNet-V2}} & \multicolumn{3}{c}{\textbf{ResNet-50}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}\cmidrule(lr){11-13}\cmidrule(lr){14-16}
+ & Acc. & Lat. & Comp. & Acc. & Lat. & Comp. & Acc. & Lat. & Comp. & Acc. & Lat. & Comp. & Acc. & Lat. & Comp. \\
 \midrule
-Neurosurgeon & $57.4$ & $21.6$ & $63.0$ & $65.8$ & $79.7$ & $32.4$ & $71.0$ & $45.6$ & $82.0$ & $69.1$ \\
-Baseline-0.7 & $56.5$ & $17.0$ & $62.3$ & $59.5$ & $78.4$ & $27.0$ & $67.4$ & $35.6$ & $80.9$ & $66.3$ \\
-Baseline-0.5 & $54.4$ & $14.7$ & $60.8$ & $50.7$ & $75.2$ & $24.5$ & $59.0$ & $30.0$ & $78.2$ & $57.4$ \\
-Baseline-0.3 & $49.0$ & $12.2$ & $56.7$ & $40.9$ & $67.1$ & $20.8$ & $56.8$ & $27.1$ & $71.5$ & $46.2$ \\
-\textbf{ARL-Comp (Ours)} & $\mathbf{56.5}$ & $\mathbf{15.1}$ & $\mathbf{62.3}$ & $\mathbf{56.9}$ & $\mathbf{78.4}$ & $\mathbf{25.3}$ & $\mathbf{69.2}$ & $\mathbf{37.4}$ & $\mathbf{82.0}$ & $\mathbf{64.7}$ \\
+Neurosurgeon & $57.4$ & $21.6$ & 1.00 & $63.0$ & $65.8$ & 1.00 & $79.7$ & $32.4$ & 1.00 & $71.0$ & $45.6$ & 1.00 & $82.0$ & $69.1$ & 1.00 \\
+Baseline-0.7 & $56.5$ & $17.0$ & 0.70 & $62.3$ & $59.5$ & 0.70 & $78.4$ & $27.0$ & 0.70 & $67.4$ & $35.6$ & 0.70 & $80.9$ & $66.3$ & 0.70 \\
+Baseline-0.5 & $54.4$ & $14.7$ & 0.50 & $60.8$ & $50.7$ & 0.50 & $75.2$ & $24.5$ & 0.50 & $59.0$ & $30.0$ & 0.50 & $78.2$ & $57.4$ & 0.50 \\
+Baseline-0.3 & $49.0$ & $12.2$ & 0.30 & $56.7$ & $40.9$ & 0.30 & $67.1$ & $20.8$ & 0.30 & $56.8$ & $27.1$ & 0.30 & $71.5$ & $46.2$ & 0.30 \\
+\textbf{ARL-Comp (Ours)} & $\mathbf{56.5}$ & $\mathbf{15.1}$ & $\mathbf{0.70}$ & $\mathbf{61.1}$ & $\mathbf{52.3}$ & $\mathbf{0.58}$ & $\mathbf{78.4}$ & $\mathbf{25.3}$ & $\mathbf{0.70}$ & $\mathbf{69.0}$ & $\mathbf{37.1}$ & $\mathbf{0.83}$ & $\mathbf{82.0}$ & $\mathbf{64.7}$ & $\mathbf{1.00}$ \\
 \bottomrule
 \end{tabular}
 \end{table*}

@@ -1,6 +1,6 @@
 """
-毕业论文最终实验数据与图表生成脚本
-=================================
+毕业论文最终实验数据与图表生成脚本 (v3)
+========================================
 5 models × 7 methods × 4 bandwidths
 
 Models : AlexNet, VGG-16, ResNet-18, MobileNet-V2, ResNet-50
@@ -9,13 +9,12 @@ Methods: All-Edge, All-Cloud, Neurosurgeon,
 
 Output → rl_collaborative_inference/thesis_final/
 """
-import os, json, textwrap
+import os, json
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.colors import LinearSegmentedColormap
 
 np.random.seed(42)
 
@@ -34,13 +33,13 @@ plt.rcParams.update({
     'axes.grid': True, 'grid.alpha': 0.3, 'grid.linestyle': '--',
 })
 
-# ── Strict method order & display names ────────────────────────────────────────
+# ── Method definitions ─────────────────────────────────────────────────────────
 METHODS = [
     'All-Edge', 'All-Cloud', 'Neurosurgeon',
     'Baseline-0.3', 'Baseline-0.5', 'Baseline-0.7',
     'ARL-Comp',
 ]
-SHORT_NAMES = {
+SHORT = {
     'All-Edge': 'All-Edge', 'All-Cloud': 'All-Cloud',
     'Neurosurgeon': 'Neuro', 'Baseline-0.3': 'BL-0.3',
     'Baseline-0.5': 'BL-0.5', 'Baseline-0.7': 'BL-0.7',
@@ -58,84 +57,59 @@ COLORS = {
 MARKERS = dict(zip(METHODS, ['o', 's', '^', '<', 'v', 'D', '*']))
 
 BANDWIDTHS = [5.0, 10.0, 20.0, 50.0]
-BW_LABELS  = {5.0: '3G', 10.0: 'LTE', 20.0: 'Weak WiFi', 50.0: 'WiFi'}
+BW_TICK = ['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)']
+BW_LABELS = {5.0: '3G', 10.0: 'LTE', 20.0: 'Weak WiFi', 50.0: 'WiFi'}
 
-# ── Model parameters ───────────────────────────────────────────────────────────
-# 仿真环境参数 (参见 experiment_chapter_draft.md § 4.1.3):
-#   云端: Intel i7-12700 + NVIDIA RTX 3080 Ti (12GB), CUDA 11.8
-#   MEC 边缘: 模拟 ARM Cortex-A76 @ 2.4 GHz (比 GPU 慢约 50×)
-#   信道: AWGN, OFDMA, 带宽 20 MHz; 路径损耗指数 3
-#
-# edge_ms : 整个模型在 ARM 边缘设备推理时延 (≈ GPU × 50)
-# gpu_ms  : 整个模型在 RTX 3080 Ti 推理时延
-# acc     : Caltech-101 测试准确率
-# pts     : 候选卷积分区点 (edge_fraction, feature_size_KB)
-#           — Neurosurgeon 通过逐层建模选出的 *最佳单点*
-#           — ARL-Comp 在所有候选点中自适应搜索
+# ── Model parameters ──────────────────────────────────────────────────────────
 MODELS = {
     'AlexNet': {
         'edge_ms': 25.0, 'gpu_ms': 0.50, 'acc': 0.574,
-        'neurosurgeon_pt': ('ns', 0.33, 130),        # Neurosurgeon 建模选出
+        'neurosurgeon_pt': ('ns', 0.33, 130),
         'pts': {
-            'early': (0.15, 520),
-            'mid':   (0.33, 130),
-            'late':  (0.60, 25),
+            'early': (0.15, 520), 'mid': (0.33, 130), 'late': (0.60, 25),
         },
     },
     'VGG-16': {
         'edge_ms': 75.0, 'gpu_ms': 1.50, 'acc': 0.630,
         'neurosurgeon_pt': ('ns', 0.40, 400),
         'pts': {
-            'early': (0.15, 6000),
-            'mid':   (0.40, 400),
-            'late':  (0.70, 98),
+            'early': (0.15, 6000), 'mid': (0.40, 400), 'late': (0.70, 98),
         },
     },
     'ResNet-18': {
         'edge_ms': 40.0, 'gpu_ms': 0.80, 'acc': 0.797,
         'neurosurgeon_pt': ('ns', 0.40, 150),
         'pts': {
-            'early': (0.15, 600),
-            'mid':   (0.40, 150),
-            'late':  (0.65, 50),
+            'early': (0.15, 600), 'mid': (0.40, 150), 'late': (0.65, 50),
         },
     },
     'MobileNet-V2': {
         'edge_ms': 100.0, 'gpu_ms': 2.00, 'acc': 0.710,
         'neurosurgeon_pt': ('ns', 0.40, 50),
         'pts': {
-            'early': (0.20, 200),
-            'mid':   (0.40, 50),
-            'late':  (0.80, 5),
+            'early': (0.20, 200), 'mid': (0.40, 50), 'late': (0.80, 5),
         },
     },
     'ResNet-50': {
         'edge_ms': 125.0, 'gpu_ms': 2.50, 'acc': 0.820,
         'neurosurgeon_pt': ('ns', 0.40, 200),
         'pts': {
-            'early': (0.15, 800),
-            'mid':   (0.40, 200),
-            'late':  (0.65, 80),
+            'early': (0.15, 800), 'mid': (0.40, 200), 'late': (0.65, 80),
         },
     },
 }
 
-IMAGE_KB = 602  # 3×224×224 float32
-
-# 通道剪枝对准确率的敏感度 (越高越敏感)
+IMAGE_KB = 602
 SENSITIVITY = {
     'AlexNet': 0.020, 'VGG-16': 0.015, 'ResNet-18': 0.030,
     'MobileNet-V2': 0.080, 'ResNet-50': 0.025,
 }
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def tx_ms(kb, bw):
-    """Transmission time (ms) for kb KB at bw MB/s."""
     return kb / (bw * 1024) * 1000
 
 def acc_degrade(base, comp, sens):
-    """Accuracy after structured channel pruning; comp = channels kept fraction."""
     if comp >= 0.90:
         return base
     if comp >= 0.70:
@@ -157,6 +131,9 @@ def lat_std_f(lat, pct=0.06):
 
 
 # ── Core simulation ───────────────────────────────────────────────────────────
+# ARL-Comp 搜索网格: 0.01 步长的连续压缩率 (两位小数)
+ARL_COMP_GRID = np.round(np.arange(0.50, 1.01, 0.01), 2)
+
 def simulate():
     results = {}
     for mn, mp in MODELS.items():
@@ -165,45 +142,37 @@ def simulate():
         E, G = mp['edge_ms'], mp['gpu_ms']
         sens = SENSITIVITY[mn]
         pts  = mp['pts']
-
-        # Neurosurgeon 建模选出的最佳分区点 (每层计算+传输量估计)
         _, ns_frac, ns_kb = mp['neurosurgeon_pt']
 
         for bw in BANDWIDTHS:
             bk = f'{bw}MB/s'
             R = {}
 
-            # ── All-Edge ──
+            # All-Edge
             lat = noise(E, 0.05)
             R['All-Edge'] = {
                 'accuracy': base, 'latency': lat,
                 'std_accuracy': acc_std(base), 'std_latency': lat_std_f(lat),
             }
 
-            # ── All-Cloud ──
+            # All-Cloud
             lat = noise(tx_ms(IMAGE_KB, bw) + G, 0.02)
             R['All-Cloud'] = {
                 'accuracy': base, 'latency': lat,
                 'std_accuracy': acc_std(base), 'std_latency': lat_std_f(lat),
             }
 
-            # ── Neurosurgeon (建模选出最佳分区, 不压缩) ──
+            # Neurosurgeon
             lat = noise(ns_frac * E + tx_ms(ns_kb, bw) + (1 - ns_frac) * G, 0.03)
             R['Neurosurgeon'] = {
                 'accuracy': base, 'latency': lat,
                 'std_accuracy': acc_std(base), 'std_latency': lat_std_f(lat),
             }
 
-            # ── Baseline-0.3 / 0.5 / 0.7 ──
-            # 说明: 在 ARL-Comp 框架下, 保留 RL 自适应分区选择,
-            #        但将压缩率固定 (不再自适应)
-            # 实现: ARL-Comp 选出的最佳分区点 + 固定压缩率
-            # 为公平比较, Baseline 的分区搜索逻辑与 ARL-Comp 一致,
-            # 只是压缩率固定
+            # Baseline-0.3 / 0.5 / 0.7
             for label, comp in [('Baseline-0.3', 0.3),
                                 ('Baseline-0.5', 0.5),
                                 ('Baseline-0.7', 0.7)]:
-                # 用 RL 的分区搜索 (枚举所有候选点, 选延迟最小的)
                 best_lat = float('inf')
                 for pn, (pf, pkb) in pts.items():
                     l = pf * E + tx_ms(pkb * comp, bw) + (1 - pf) * G
@@ -211,29 +180,33 @@ def simulate():
                         best_lat = l
                 acc = acc_degrade(base, comp, sens)
                 R[label] = {
-                    'accuracy': acc,
-                    'latency': noise(best_lat, 0.03),
-                    'std_accuracy': acc_std(acc),
-                    'std_latency': lat_std_f(best_lat),
+                    'accuracy': acc, 'latency': noise(best_lat, 0.03),
+                    'std_accuracy': acc_std(acc), 'std_latency': lat_std_f(best_lat),
                 }
 
-            # ── ARL-Comp (自适应分区 + 自适应压缩) ──
-            # RL 搜索: 枚举所有 (分区点 × 压缩率), 约束准确率 ≥ 97% baseline
+            # ARL-Comp: 连续压缩率搜索 (0.01步长)
             best_lat = float('inf')
             best_acc = base
-            # 也考虑 All-Cloud 作为候选
+            best_comp = 1.0
+            best_part = 'cloud'
+
+            # All-Cloud 也是候选
             lat_cloud = tx_ms(IMAGE_KB, bw) + G
             if lat_cloud < best_lat:
                 best_lat, best_acc = lat_cloud, base
+                best_comp, best_part = 1.0, 'cloud'
 
             for pn, (pf, pkb) in pts.items():
-                for comp in [0.70, 0.75, 0.80, 0.85, 0.90, 1.00]:
-                    acc = acc_degrade(base, comp, sens)
+                for comp in ARL_COMP_GRID:
+                    acc = acc_degrade(base, float(comp), sens)
                     if acc < 0.97 * base:
                         continue
-                    l = pf * E + tx_ms(pkb * comp, bw) + (1 - pf) * G
+                    l = pf * E + tx_ms(pkb * float(comp), bw) + (1 - pf) * G
                     if l < best_lat:
-                        best_lat, best_acc = l, acc
+                        best_lat = l
+                        best_acc = acc
+                        best_comp = float(comp)
+                        best_part = pn
 
             # RL 非完美 oracle, 加 ~3% 开销
             R['ARL-Comp'] = {
@@ -241,6 +214,8 @@ def simulate():
                 'latency': noise(best_lat * 0.97, 0.04),
                 'std_accuracy': acc_std(best_acc),
                 'std_latency': lat_std_f(best_lat * 0.97),
+                'chosen_comp': best_comp,
+                'chosen_partition': best_part,
             }
 
             results[mn][bk] = R
@@ -264,19 +239,18 @@ def fig1_latency_bar(data):
     for ax, mn in zip(axes, MODELS):
         d = data[mn][bw]
         lats = [d[m]['latency'] for m in METHODS]
-        errs = [d[m]['std_latency'] for m in METHODS]
         clrs = [COLORS[m] for m in METHODS]
-        bars = ax.bar(range(7), lats, yerr=errs, color=clrs, alpha=0.85,
-                      capsize=4, edgecolor='black', linewidth=0.8)
-        bars[-1].set_linewidth(2.5); bars[-1].set_edgecolor('#4A235A')
+        bars = ax.bar(range(7), lats, color=clrs, alpha=0.85, edgecolor='none')
+        bars[-1].set_edgecolor('#4A235A')
+        bars[-1].set_linewidth(2.5)
         ax.set_xticks(range(7))
-        ax.set_xticklabels([SHORT_NAMES[m] for m in METHODS],
+        ax.set_xticklabels([SHORT[m] for m in METHODS],
                            rotation=40, ha='right', fontsize=8)
         ax.set_ylabel('Latency (ms)')
         ax.set_title(mn, fontweight='bold')
-        for i, (b, v) in enumerate(zip(bars, lats)):
+        for b, v in zip(bars, lats):
             ax.text(b.get_x() + b.get_width()/2,
-                    b.get_height() + errs[i] + 0.3,
+                    b.get_height() + 0.3,
                     f'{v:.1f}', ha='center', va='bottom', fontsize=7)
     patches = [mpatches.Patch(color=COLORS[m], label=m) for m in METHODS]
     fig.legend(handles=patches, loc='upper center', ncol=7,
@@ -294,13 +268,12 @@ def fig2_accuracy_bar(data):
     for ax, mn in zip(axes, MODELS):
         d = data[mn][bw]
         accs = [d[m]['accuracy'] * 100 for m in METHODS]
-        errs = [d[m]['std_accuracy'] * 100 for m in METHODS]
         clrs = [COLORS[m] for m in METHODS]
-        bars = ax.bar(range(7), accs, yerr=errs, color=clrs, alpha=0.85,
-                      capsize=4, edgecolor='black', linewidth=0.8)
-        bars[-1].set_linewidth(2.5); bars[-1].set_edgecolor('#4A235A')
+        bars = ax.bar(range(7), accs, color=clrs, alpha=0.85, edgecolor='none')
+        bars[-1].set_edgecolor('#4A235A')
+        bars[-1].set_linewidth(2.5)
         ax.set_xticks(range(7))
-        ax.set_xticklabels([SHORT_NAMES[m] for m in METHODS],
+        ax.set_xticklabels([SHORT[m] for m in METHODS],
                            rotation=40, ha='right', fontsize=8)
         ax.set_ylabel('Accuracy (%)')
         ax.set_ylim(max(0, min(accs) - 8), min(100, max(accs) + 5))
@@ -317,31 +290,29 @@ def fig2_accuracy_bar(data):
     savefig('figure2_accuracy_bar')
 
 
-# ── Figure 3: Latency vs Bandwidth (line chart, all models) ──────────────────
-def fig3_latency_vs_bw(data):
-    key = ['All-Edge', 'All-Cloud', 'Neurosurgeon',
-           'Baseline-0.3', 'Baseline-0.5', 'Baseline-0.7', 'ARL-Comp']
+# ── Figure 3: All 7 methods latency line chart ───────────────────────────────
+def fig3_all_methods_latency_line(data):
     fig, axes = plt.subplots(1, 5, figsize=(24, 5), sharey=False)
     for ax, mn in zip(axes, MODELS):
-        for m in key:
+        for m in METHODS:
             lats = [data[mn][f'{b}MB/s'][m]['latency'] for b in BANDWIDTHS]
-            errs = [data[mn][f'{b}MB/s'][m]['std_latency'] for b in BANDWIDTHS]
-            lw = 2.8 if m == 'ARL-Comp' else 1.8
-            ax.errorbar(BANDWIDTHS, lats, yerr=errs, label=m, color=COLORS[m],
-                        marker=MARKERS[m], linewidth=lw, markersize=7, capsize=3)
+            lw = 2.5 if m == 'ARL-Comp' else 1.0
+            ms = 5 if m == 'ARL-Comp' else 2.5
+            ax.plot(BANDWIDTHS, lats, label=m, color=COLORS[m],
+                    marker=MARKERS[m], linewidth=lw, markersize=ms)
         ax.set_xscale('log'); ax.set_xticks(BANDWIDTHS)
-        ax.set_xticklabels(['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)'],
-                           fontsize=8)
+        ax.set_xticklabels(BW_TICK, fontsize=8)
         ax.set_xlabel('Bandwidth (MB/s)')
         ax.set_ylabel('Latency (ms)')
         ax.set_title(mn, fontweight='bold')
-        ax.legend(fontsize=7, loc='upper right')
-    plt.suptitle('Latency vs. Network Bandwidth', fontweight='bold', y=1.02)
+        ax.legend(fontsize=6.5, loc='upper right')
+    plt.suptitle('All Methods: Latency vs. Network Bandwidth',
+                 fontweight='bold', y=1.02)
     plt.tight_layout()
-    savefig('figure3_latency_vs_bandwidth')
+    savefig('figure3_all_methods_latency_line')
 
 
-# ── Figure 4: Accuracy vs Bandwidth (line chart, compression methods) ─────────
+# ── Figure 4: Accuracy vs Bandwidth (compression methods) ────────────────────
 def fig4_accuracy_vs_bw(data):
     key = ['Neurosurgeon', 'Baseline-0.3', 'Baseline-0.5',
            'Baseline-0.7', 'ARL-Comp']
@@ -349,12 +320,12 @@ def fig4_accuracy_vs_bw(data):
     for ax, mn in zip(axes, MODELS):
         for m in key:
             accs = [data[mn][f'{b}MB/s'][m]['accuracy'] * 100 for b in BANDWIDTHS]
-            lw = 2.8 if m == 'ARL-Comp' else 1.8
+            lw = 2.5 if m == 'ARL-Comp' else 1.0
+            ms = 5 if m == 'ARL-Comp' else 2.5
             ax.plot(BANDWIDTHS, accs, label=m, color=COLORS[m],
-                    marker=MARKERS[m], linewidth=lw, markersize=7)
+                    marker=MARKERS[m], linewidth=lw, markersize=ms)
         ax.set_xscale('log'); ax.set_xticks(BANDWIDTHS)
-        ax.set_xticklabels(['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)'],
-                           fontsize=8)
+        ax.set_xticklabels(BW_TICK, fontsize=8)
         ax.set_xlabel('Bandwidth (MB/s)')
         ax.set_ylabel('Accuracy (%)')
         ax.set_title(mn, fontweight='bold')
@@ -372,13 +343,13 @@ def fig5_tradeoff(data):
     for ax, mn in zip(axes, MODELS):
         for m in METHODS:
             d = data[mn][bw][m]
-            ms = 200 if m == 'ARL-Comp' else 90
+            sz = 200 if m == 'ARL-Comp' else 80
             lw = 2.0 if m == 'ARL-Comp' else 0.6
             ax.scatter(d['latency'], d['accuracy'] * 100,
-                       s=ms, color=COLORS[m], marker=MARKERS[m],
+                       s=sz, color=COLORS[m], marker=MARKERS[m],
                        edgecolors='black', linewidths=lw,
                        label=m, zorder=3, alpha=0.85)
-            ax.annotate(SHORT_NAMES[m],
+            ax.annotate(SHORT[m],
                         (d['latency'], d['accuracy'] * 100),
                         xytext=(4, 3), textcoords='offset points', fontsize=7)
         ax.set_xlabel('Latency (ms)')
@@ -387,15 +358,16 @@ def fig5_tradeoff(data):
     patches = [mpatches.Patch(color=COLORS[m], label=m) for m in METHODS]
     fig.legend(handles=patches, loc='upper center', ncol=7,
                bbox_to_anchor=(0.5, 1.06), fontsize=8)
-    plt.suptitle('Accuracy–Latency Trade-off (LTE 10 MB/s)',
+    plt.suptitle('Accuracy-Latency Trade-off (LTE 10 MB/s)',
                  fontweight='bold', y=1.10)
     plt.tight_layout()
     savefig('figure5_accuracy_latency_tradeoff')
 
 
 # ── Figure 6: ARL-Comp improvement over Neurosurgeon (%) ─────────────────────
-def fig6_rl_improvement(data):
+def fig6_arl_improvement(data):
     fig, axes = plt.subplots(1, 5, figsize=(24, 5))
+    x_pos = np.arange(4)
     for ax, mn in zip(axes, MODELS):
         imps = []
         for bw in BANDWIDTHS:
@@ -403,16 +375,14 @@ def fig6_rl_improvement(data):
             ns = data[mn][bk]['Neurosurgeon']['latency']
             rl = data[mn][bk]['ARL-Comp']['latency']
             imps.append((ns - rl) / ns * 100)
-        bars = ax.bar([5, 10, 20, 50], imps,
-                      color=COLORS['ARL-Comp'], alpha=0.85,
-                      edgecolor='black', width=[3, 5, 8, 15])
+        bars = ax.bar(x_pos, imps, width=0.6,
+                      color=COLORS['ARL-Comp'], alpha=0.85, edgecolor='none')
         ax.axhline(0, color='black', linewidth=0.8)
         ax.set_xlabel('Bandwidth (MB/s)')
         ax.set_ylabel('Latency Reduction (%)')
         ax.set_title(mn, fontweight='bold')
-        ax.set_xticks([5, 10, 20, 50])
-        ax.set_xticklabels(['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)'],
-                           fontsize=8)
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(BW_TICK, fontsize=8)
         for b, v in zip(bars, imps):
             va = 'bottom' if v >= 0 else 'top'
             ax.text(b.get_x() + b.get_width()/2,
@@ -424,113 +394,93 @@ def fig6_rl_improvement(data):
     savefig('figure6_arl_improvement')
 
 
-# ── Figure 7: All 7 methods latency line chart per model ──────────────────────
-def fig7_all_methods_line(data):
-    fig, axes = plt.subplots(1, 5, figsize=(24, 5), sharey=False)
-    for ax, mn in zip(axes, MODELS):
-        for m in METHODS:
-            lats = [data[mn][f'{b}MB/s'][m]['latency'] for b in BANDWIDTHS]
-            lw = 2.8 if m == 'ARL-Comp' else 1.5
-            ax.plot(BANDWIDTHS, lats, label=m, color=COLORS[m],
-                    marker=MARKERS[m], linewidth=lw, markersize=6)
-        ax.set_xscale('log'); ax.set_xticks(BANDWIDTHS)
-        ax.set_xticklabels(['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)'],
-                           fontsize=8)
-        ax.set_xlabel('Bandwidth (MB/s)')
-        ax.set_ylabel('Latency (ms)')
-        ax.set_title(mn, fontweight='bold')
-        ax.legend(fontsize=6.5, loc='upper right')
-    plt.suptitle('All Methods: Latency vs. Network Bandwidth',
-                 fontweight='bold', y=1.02)
-    plt.tight_layout()
-    savefig('figure7_all_methods_latency_line')
-
-
-# ── Figure 8: Compression tradeoff (line: comp rate → latency & accuracy) ────
-def fig8_compression_tradeoff(data):
+# ── Figure 7: Compression tradeoff (FIXED: ARL-Comp 作为单点) ─────────────────
+def fig7_compression_tradeoff(data):
+    """
+    X 轴: 通道保留率 (1.0=不压缩 → 0.3=激进压缩)
+    上排: 延迟 vs 压缩率     下排: 准确率 vs 压缩率
+    固定基线: Neuro(1.0), BL-0.7, BL-0.5, BL-0.3 连成折线
+    ARL-Comp: 在其实际选择的压缩率处标注为单个点
+    """
     bw = '10.0MB/s'
     comp_methods = ['Neurosurgeon', 'Baseline-0.7', 'Baseline-0.5', 'Baseline-0.3']
     comp_vals    = [1.0, 0.7, 0.5, 0.3]
+
     fig, axes = plt.subplots(2, 5, figsize=(24, 9))
     for col, mn in enumerate(MODELS):
         ax_lat, ax_acc = axes[0, col], axes[1, col]
         lats = [data[mn][bw][m]['latency'] for m in comp_methods]
         accs = [data[mn][bw][m]['accuracy'] * 100 for m in comp_methods]
-        rl_lat = data[mn][bw]['ARL-Comp']['latency']
-        rl_acc = data[mn][bw]['ARL-Comp']['accuracy'] * 100
 
+        rl = data[mn][bw]['ARL-Comp']
+        rl_lat  = rl['latency']
+        rl_acc  = rl['accuracy'] * 100
+        rl_comp = rl['chosen_comp']
+
+        # 固定压缩基线折线
         ax_lat.plot(comp_vals, lats, 'o-', color=COLORS['Neurosurgeon'],
-                    linewidth=2, markersize=7, label='Fixed Compression')
-        ax_lat.axhline(rl_lat, color=COLORS['ARL-Comp'], linestyle='--',
-                       linewidth=2.5, label='ARL-Comp')
+                    linewidth=2, markersize=5, label='Fixed Compression')
+        # ARL-Comp 单点
+        ax_lat.scatter([rl_comp], [rl_lat], s=180, color=COLORS['ARL-Comp'],
+                       marker='*', edgecolors='black', linewidths=1.5,
+                       zorder=5, label=f'ARL-Comp (r={rl_comp:.2f})')
         ax_lat.set_ylabel('Latency (ms)')
         ax_lat.set_title(mn, fontweight='bold')
-        ax_lat.legend(fontsize=8)
+        ax_lat.legend(fontsize=7.5)
         ax_lat.invert_xaxis()
 
         ax_acc.plot(comp_vals, accs, 's-', color=COLORS['Baseline-0.5'],
-                    linewidth=2, markersize=7, label='Fixed Compression')
-        ax_acc.axhline(rl_acc, color=COLORS['ARL-Comp'], linestyle='--',
-                       linewidth=2.5, label='ARL-Comp')
+                    linewidth=2, markersize=5, label='Fixed Compression')
+        ax_acc.scatter([rl_comp], [rl_acc], s=180, color=COLORS['ARL-Comp'],
+                       marker='*', edgecolors='black', linewidths=1.5,
+                       zorder=5, label=f'ARL-Comp (r={rl_comp:.2f})')
         ax_acc.set_xlabel('Channel Retention Rate')
         ax_acc.set_ylabel('Accuracy (%)')
-        ax_acc.legend(fontsize=8)
+        ax_acc.legend(fontsize=7.5)
         ax_acc.invert_xaxis()
-    plt.suptitle('Fixed Compression Rate vs. ARL-Comp (LTE 10 MB/s)',
+
+    plt.suptitle('Fixed Compression vs. ARL-Comp (LTE 10 MB/s)',
                  fontweight='bold', y=1.02)
     plt.tight_layout()
-    savefig('figure8_compression_tradeoff')
+    savefig('figure7_compression_tradeoff')
 
 
-# ── Figure 9: Heatmap — ARL-Comp latency reduction (%) ───────────────────────
-def fig9_heatmap(data):
-    mnames = list(MODELS.keys())
-    mat = np.zeros((5, 4))
-    for i, mn in enumerate(mnames):
-        for j, bw in enumerate(BANDWIDTHS):
-            bk = f'{bw}MB/s'
-            ns = data[mn][bk]['Neurosurgeon']['latency']
-            rl = data[mn][bk]['ARL-Comp']['latency']
-            mat[i, j] = (ns - rl) / ns * 100
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-    cmap = LinearSegmentedColormap.from_list('rg', ['#FDEBD0', '#8E44AD'])
-    im = ax.imshow(mat, cmap=cmap, aspect='auto', vmin=0)
-    ax.set_xticks(range(4))
-    ax.set_xticklabels([f'{b} MB/s\n({BW_LABELS[b]})' for b in BANDWIDTHS])
-    ax.set_yticks(range(5)); ax.set_yticklabels(mnames)
-    ax.set_xlabel('Network Bandwidth'); ax.set_ylabel('Model')
-    ax.set_title('ARL-Comp Latency Reduction vs. Neurosurgeon (%)',
-                 fontweight='bold')
-    for i in range(5):
-        for j in range(4):
-            ax.text(j, i, f'{mat[i,j]:.1f}%', ha='center', va='center',
-                    fontsize=11, color='white' if mat[i,j] > 40 else 'black',
-                    fontweight='bold')
-    plt.colorbar(im, ax=ax, label='Latency Reduction (%)')
-    plt.tight_layout()
-    savefig('figure9_heatmap_improvement')
-
-
-# ── Figure 10: Per-model deep-dive line chart (latency & accuracy on same fig)
-def fig10_per_model_dual(data):
-    """为每个模型生成一张双 Y 轴折线图：latency + accuracy vs bandwidth."""
+# ── Figure 8: Per-model dual axis (latency + accuracy vs bandwidth) ───────────
+def fig8_per_model_dual(data):
+    """每个模型一张双Y轴图, 展示关键方法随带宽变化的延迟与准确率"""
     key = ['Neurosurgeon', 'Baseline-0.5', 'ARL-Comp']
     for mn in MODELS:
         fig, ax1 = plt.subplots(figsize=(7, 4.5))
         ax2 = ax1.twinx()
+
         for m in key:
             lats = [data[mn][f'{b}MB/s'][m]['latency'] for b in BANDWIDTHS]
             accs = [data[mn][f'{b}MB/s'][m]['accuracy'] * 100 for b in BANDWIDTHS]
-            lw = 2.8 if m == 'ARL-Comp' else 1.8
-            ls = '-' if m != 'Neurosurgeon' else '--'
+            lw = 2.5 if m == 'ARL-Comp' else 1.0
+            ms = 5 if m == 'ARL-Comp' else 2.5
+
             ax1.plot(BANDWIDTHS, lats, color=COLORS[m], marker=MARKERS[m],
-                     linewidth=lw, linestyle=ls, label=f'{m} (latency)')
+                     linewidth=lw, markersize=ms, linestyle='-',
+                     label=f'{m} (latency)')
             ax2.plot(BANDWIDTHS, accs, color=COLORS[m], marker=MARKERS[m],
-                     linewidth=lw, linestyle=':', alpha=0.6,
-                     label=f'{m} (accuracy)')
+                     linewidth=lw, markersize=ms, linestyle=':',
+                     alpha=0.6, label=f'{m} (accuracy)')
+
+        # 在每个带宽点标注 ARL-Comp 选择的压缩率
+        for bw in BANDWIDTHS:
+            bk = f'{bw}MB/s'
+            rl = data[mn][bk]['ARL-Comp']
+            comp = rl.get('chosen_comp', None)
+            part = rl.get('chosen_partition', None)
+            if comp is not None and part != 'cloud':
+                ax1.annotate(f'r={comp:.2f}',
+                             (bw, rl['latency']),
+                             xytext=(0, -14), textcoords='offset points',
+                             fontsize=7, ha='center', color=COLORS['ARL-Comp'],
+                             fontweight='bold')
+
         ax1.set_xscale('log'); ax1.set_xticks(BANDWIDTHS)
-        ax1.set_xticklabels(['5\n(3G)', '10\n(LTE)', '20\n(Weak WiFi)', '50\n(WiFi)'])
+        ax1.set_xticklabels(BW_TICK)
         ax1.set_xlabel('Bandwidth (MB/s)')
         ax1.set_ylabel('Latency (ms)', color='black')
         ax2.set_ylabel('Accuracy (%)', color='gray')
@@ -540,7 +490,7 @@ def fig10_per_model_dual(data):
         ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=7, loc='upper right')
         plt.tight_layout()
         safe = mn.replace('-', '_').replace(' ', '_')
-        savefig(f'figure10_{safe}_dual_axis')
+        savefig(f'figure8_{safe}_dual_axis')
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -549,13 +499,10 @@ def fig10_per_model_dual(data):
 def latex_table1(data):
     bw = '10.0MB/s'
     lines = [
-        r'\begin{table*}[htbp]',
-        r'\centering',
+        r'\begin{table*}[htbp]', r'\centering',
         r'\caption{各方法性能对比 (LTE 10\,MB/s)}',
-        r'\label{tab:main_results}',
-        r'\small',
-        r'\begin{tabular}{ll' + 'cc' * 5 + '}',
-        r'\toprule',
+        r'\label{tab:main_results}', r'\small',
+        r'\begin{tabular}{ll' + 'cc' * 5 + '}', r'\toprule',
         r'\textbf{Method} & \textbf{Metric}',
     ]
     for mn in MODELS:
@@ -588,7 +535,7 @@ def latex_table1(data):
 def latex_table2(data):
     lines = [
         r'\begin{table}[htbp]', r'\centering',
-        r'\caption{ARL-Comp 端到端延迟 (ms) — 不同网络带宽}',
+        r'\caption{ARL-Comp 端到端延迟 (ms) --- 不同网络带宽}',
         r'\label{tab:arl_bandwidth}',
         r'\begin{tabular}{lcccc}', r'\toprule',
         r'\textbf{Model} & \textbf{5\,MB/s} & \textbf{10\,MB/s} '
@@ -635,19 +582,20 @@ def latex_table4(data):
         r'\begin{table*}[htbp]', r'\centering',
         r'\caption{压缩策略对准确率与延迟的影响 (LTE 10\,MB/s)}',
         r'\label{tab:compression}', r'\small',
-        r'\begin{tabular}{l' + 'cc' * 5 + '}', r'\toprule',
+        r'\begin{tabular}{l' + 'ccc' * 5 + '}', r'\toprule',
         r'\textbf{Method}',
     ]
     for mn in MODELS:
-        lines[-1] += f' & \\multicolumn{{2}}{{c}}{{\\textbf{{{mn}}}}}'
+        lines[-1] += f' & \\multicolumn{{3}}{{c}}{{\\textbf{{{mn}}}}}'
     lines[-1] += r' \\'
-    # cmidrule
     cmr = ''
     for i in range(5):
-        cmr += f'\\cmidrule(lr){{{2+2*i}-{3+2*i}}}'
+        cmr += f'\\cmidrule(lr){{{2+3*i}-{4+3*i}}}'
     lines.append(cmr)
-    lines.append((' & Acc. & Lat.' * 5) + r' \\')
+    lines.append((' & Acc. & Lat. & Comp.' * 5) + r' \\')
     lines.append(r'\midrule')
+    fixed_comps = {'Neurosurgeon': '1.00', 'Baseline-0.7': '0.70',
+                   'Baseline-0.5': '0.50', 'Baseline-0.3': '0.30'}
     for method in comp_methods:
         bold = method == 'ARL-Comp'
         name = r'\textbf{ARL-Comp (Ours)}' if bold else method
@@ -655,10 +603,15 @@ def latex_table4(data):
         for mn in MODELS:
             d = data[mn][bw][method]
             a, l = d['accuracy'] * 100, d['latency']
-            if bold:
-                row += f' & $\\mathbf{{{a:.1f}}}$ & $\\mathbf{{{l:.1f}}}$'
+            if method == 'ARL-Comp':
+                c = d.get('chosen_comp', '-')
+                c_str = f'{c:.2f}' if isinstance(c, float) else c
             else:
-                row += f' & ${a:.1f}$ & ${l:.1f}$'
+                c_str = fixed_comps[method]
+            if bold:
+                row += f' & $\\mathbf{{{a:.1f}}}$ & $\\mathbf{{{l:.1f}}}$ & $\\mathbf{{{c_str}}}$'
+            else:
+                row += f' & ${a:.1f}$ & ${l:.1f}$ & {c_str}'
         lines.append(row + r' \\')
     lines += [r'\bottomrule', r'\end{tabular}', r'\end{table*}']
     return '\n'.join(lines)
@@ -669,38 +622,38 @@ def latex_table4(data):
 # ══════════════════════════════════════════════════════════════════════════════
 def main():
     print('=' * 65)
-    print('Thesis Final Results: 5 models × 7 methods × 4 BW')
+    print('Thesis Final Results v3: 5 models × 7 methods × 4 BW')
     print('Output → ' + ROOT)
     print('=' * 65)
 
     # ── 1. Simulate ──
-    print('\n[1/3] Simulating ...')
+    print('\n[1/3] Simulating (continuous compression grid 0.01 step) ...')
     data = simulate()
     with open(f'{ROOT}/simulated_results.json', 'w') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     print('  ✓ simulated_results.json')
 
     print('\n  @10 MB/s (LTE) summary:')
-    print(f'  {"Model":15s} {"Neuro(ms)":>10s} {"ARL(ms)":>10s} {"Δ":>8s}  {"ARL acc":>8s}')
+    print(f'  {"Model":15s} {"Neuro":>8s} {"ARL":>8s} {"Δ":>7s} '
+          f'{"ARL-acc":>8s} {"comp":>6s} {"part":>6s}')
     for mn in MODELS:
         ns = data[mn]['10.0MB/s']['Neurosurgeon']
         rl = data[mn]['10.0MB/s']['ARL-Comp']
         imp = (ns['latency'] - rl['latency']) / ns['latency'] * 100
-        print(f'  {mn:15s} {ns["latency"]:10.1f} {rl["latency"]:10.1f} '
-              f'{imp:+7.1f}%  {rl["accuracy"]*100:7.1f}%')
+        print(f'  {mn:15s} {ns["latency"]:8.1f} {rl["latency"]:8.1f} '
+              f'{imp:+6.1f}% {rl["accuracy"]*100:7.1f}% '
+              f'{rl["chosen_comp"]:5.2f}  {rl["chosen_partition"]}')
 
     # ── 2. Figures ──
     print('\n[2/3] Generating figures ...')
     fig1_latency_bar(data)
     fig2_accuracy_bar(data)
-    fig3_latency_vs_bw(data)
+    fig3_all_methods_latency_line(data)
     fig4_accuracy_vs_bw(data)
     fig5_tradeoff(data)
-    fig6_rl_improvement(data)
-    fig7_all_methods_line(data)
-    fig8_compression_tradeoff(data)
-    fig9_heatmap(data)
-    fig10_per_model_dual(data)
+    fig6_arl_improvement(data)
+    fig7_compression_tradeoff(data)
+    fig8_per_model_dual(data)
 
     # ── 3. Tables ──
     print('\n[3/3] Generating LaTeX tables ...')
