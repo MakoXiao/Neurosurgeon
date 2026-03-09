@@ -6,6 +6,7 @@ from models.LeNet import LeNet
 from models.AlexNet import AlexNet
 from models.VggNet import vgg16_bn
 from models.MobileNet import MobileNet
+from models.ResNet import resnet18, resnet50
 from utils.excel_utils import *
 
 
@@ -24,6 +25,10 @@ def get_dnn_model(arg: str):
         return LeNet(input_channels=input_channels)
     elif arg == "mobile_net":
         return MobileNet(input_channels=input_channels)
+    elif arg == "resnet_18":
+        return resnet18(input_channels=input_channels)
+    elif arg == "resnet_50":
+        return resnet50(input_channels=input_channels)
     else:
         raise RuntimeError("没有对应的DNN模型")
 

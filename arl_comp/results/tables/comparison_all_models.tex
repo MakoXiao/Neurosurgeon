@@ -1,0 +1,40 @@
+\begin{table*}[htbp]
+\centering
+\caption{Performance Comparison of ARL-Comp and Baselines on Caltech-101}
+\label{tab:comparison}
+\begin{tabular}{l|l|r|r|c|c}
+\hline
+\textbf{Model} & \textbf{Method} & \textbf{Latency (ms)} & \textbf{Accuracy (\%)} & \textbf{PP} & \textbf{CR} \\
+\hline\hline
+alex_net & Local Only & 23.82 & 85.0 & 22 & 1.0 \\
+ & Cloud Only & 483.28 & 85.0 & 0 & 1.0 \\
+ & Neurosurgeon & 23.82 & 85.0 & 22 & 1.0 \\
+ & Fixed Comp. (CR=0.5) & 16.16 & 84.93 & 13 & 0.5 \\
+ & ARL-Comp & 12.06 & 84.75 & 13 & 0.3 \\
+\hline
+vgg_net & Local Only & 190.95 & 85.0 & 19 & 1.0 \\
+ & Cloud Only & 501.44 & 85.0 & 0 & 1.0 \\
+ & Neurosurgeon & 133.56 & 85.0 & 13 & 1.0 \\
+ & Fixed Comp. (CR=0.5) & 127.0 & 84.97 & 13 & 0.5 \\
+ & ARL-Comp & 126.03 & 85.0 & 14 & 0.38 \\
+\hline
+mobile_net & Local Only & 25.86 & 85.0 & 20 & 1.0 \\
+ & Cloud Only & 484.16 & 85.0 & 0 & 1.0 \\
+ & Neurosurgeon & 25.86 & 85.0 & 20 & 1.0 \\
+ & Fixed Comp. (CR=0.5) & 25.35 & 85.0 & 17 & 0.5 \\
+ & ARL-Comp & 24.94 & 85.0 & 18 & 0.4 \\
+\hline
+resnet_18 & Local Only & 44.49 & 85.0 & 12 & 1.0 \\
+ & Cloud Only & 486.08 & 85.0 & 0 & 1.0 \\
+ & Neurosurgeon & 44.49 & 85.0 & 12 & 1.0 \\
+ & Fixed Comp. (CR=0.5) & 43.95 & 84.97 & 10 & 0.5 \\
+ & ARL-Comp & 43.79 & 85.0 & 10 & 0.4 \\
+\hline
+resnet_50 & Local Only & 109.75 & 85.0 & 20 & 1.0 \\
+ & Cloud Only & 492.55 & 85.0 & 0 & 1.0 \\
+ & Neurosurgeon & 109.75 & 85.0 & 20 & 1.0 \\
+ & Fixed Comp. (CR=0.5) & 109.75 & 85.0 & 20 & 0.5 \\
+ & ARL-Comp & 109.17 & 84.99 & 18 & 0.3 \\
+\hline
+\end{tabular}
+\end{table*}
