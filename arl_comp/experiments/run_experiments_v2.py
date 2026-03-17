@@ -259,10 +259,17 @@ class ARLCompEnvV2:
         self.state_dim = 5
         self.num_discrete_actions = self.num_partition_points
         self.continuous_action_dim = 1
-        self.continuous_action_low = 0.1
+        self.continuous_action_low = 0.2   # 最低保留20%通道, 过低会严重损害精度
         self.continuous_action_high = 1.0
 
-        # 归一化
+        # 归一化参考值
+        # local_latency: 纯本地推理延迟, 作为奖励归一化的参考
+        # 这样随机探索(选到高延迟PP)得到负奖励, 优于本地的策略得到正奖励
+        self.local_latency = compute_partition_latency_sim(
+            layer_profiles, self.num_layers, 1.0, np.mean(bandwidth_range)
+        )[0]
+        if self.local_latency <= 0:
+            self.local_latency = 1.0
         self.max_latency = max(
             compute_partition_latency_sim(layer_profiles, pp, 1.0, bandwidth_range[0])[0]
             for pp in range(self.num_layers + 1)
@@ -322,7 +329,19 @@ class ARLCompEnvV2:
         self.last_feat = feat
         self.last_edge_ratio = edge_ratio
 
-        reward = -self.weight_latency * (total / self.max_latency) + self.weight_accuracy * (acc / self.base_accuracy)
+        # 奖励函数: 以本地推理延迟为参考基准
+        # lat_ratio = total / local_lat, <1表示优于本地, >1表示差于本地
+        # 随机探索(选到cloud PP): lat_ratio≈3-20 → reward很负
+        # 收敛后(最优PP+CR): lat_ratio≈0.4-0.8 → reward接近0或为正
+        lat_ratio = min(total / self.local_latency, 5.0)  # 上限截断避免极端值
+        acc_ratio = acc / self.base_accuracy
+        # 准确率惩罚: 当精度下降超过1%时施加额外惩罚, 防止过度压缩
+        acc_penalty = 0.0
+        if acc_ratio < 0.99:
+            acc_penalty = 3.0 * (0.99 - acc_ratio)  # 每下降1%额外扣0.03
+        reward = (-self.weight_latency * lat_ratio
+                  + self.weight_accuracy * acc_ratio
+                  - acc_penalty)
         done = self.step_count >= self.max_steps
 
         info = {
@@ -431,16 +450,21 @@ def train_agent(model_type, num_episodes=300, bandwidth_range=(1, 50),
 
     env = ARLCompEnvV2(model, layer_profiles, fps, bandwidth_range, base_accuracy)
 
+    # 较高初始熵系数促进探索, 训练中逐步衰减
+    initial_entropy_coef = 0.05
+    final_entropy_coef = 0.005
+
     agent = HybridPPO(
         state_dim=env.state_dim,
         num_discrete_actions=env.num_discrete_actions,
-        continuous_action_low=0.1,
+        continuous_action_low=0.2,
         continuous_action_high=1.0,
         hidden_dim=128,
         lr_actor=3e-4,
         lr_critic=1e-3,
         gamma=0.99,
         gae_lambda=0.95,
+        entropy_coef=initial_entropy_coef,
         device="cpu",
     )
 
@@ -448,6 +472,10 @@ def train_agent(model_type, num_episodes=300, bandwidth_range=(1, 50),
            "actor_losses": [], "critic_losses": [], "entropies": []}
 
     for ep in range(num_episodes):
+        # 熵系数线性衰减: 前期多探索, 后期多利用
+        progress = ep / max(num_episodes - 1, 1)
+        agent.entropy_coef = initial_entropy_coef + (final_entropy_coef - initial_entropy_coef) * progress
+
         state = env.reset()
         ep_r, ep_lats, ep_accs, ep_pps, ep_crs = 0, [], [], [], []
 
@@ -733,21 +761,20 @@ def plot_ablation(layer_profiles, model, model_type, base_accuracy, bw=10):
         else:
             fps = list(range(n + 1))
 
-        # 计算最大延迟用于归一化 (与RL环境一致)
-        max_lat = max(
-            compute_partition_latency_sim(layer_profiles, pp, 1.0, bw)[0]
-            for pp in range(n + 1)
-        )
-        if max_lat <= 0:
-            max_lat = 1.0
+        # 用本地推理延迟作归一化参考 (与RL环境一致)
+        local_lat = compute_partition_latency_sim(layer_profiles, n, 1.0, bw)[0]
+        if local_lat <= 0:
+            local_lat = 1.0
 
         best_r, best_l, best_a, best_pp, best_cr = -1e9, 0, 0, 0, 1.0
-        cr_range = np.arange(0.1, 1.05, 0.05) if use_c else [1.0]
+        cr_range = np.arange(0.20, 1.05, 0.05) if use_c else [1.0]
         for pp in fps:
             for cr in cr_range:
                 l = compute_partition_latency_sim(layer_profiles, pp, cr, bw)[0]
                 a = estimate_accuracy_after_compression(model, layer_profiles, pp, cr, base_accuracy)
-                r = -0.5 * (l / max_lat) + 0.5 * (a / base_accuracy)
+                acc_ratio = a / base_accuracy
+                acc_pen = 3.0 * max(0, 0.99 - acc_ratio) if acc_ratio < 0.99 else 0.0
+                r = -0.5 * min(l / local_lat, 5.0) + 0.5 * acc_ratio - acc_pen
                 if r > best_r:
                     best_r, best_l, best_a, best_pp, best_cr = r, l, a, pp, cr
 
@@ -1081,32 +1108,16 @@ def run_all(model_types=None, num_episodes=400, device="cpu"):
         # 评估: 在固定带宽下评估 ARL-Comp (与基线公平对比)
         orig_bw = env.bandwidth_range
         env.bandwidth_range = (bw * 0.95, bw * 1.05)  # 固定带宽附近
-        arl = evaluate_agent(agent, env, 30)
+        arl = evaluate_agent(agent, env, 50)
         env.bandwidth_range = orig_bw
 
-        # 同时计算ARL-Comp在可行点上的理论最优 (充分训练后agent应收敛到此)
-        best_r, best_l, best_a, best_pp, best_cr = -1e9, 0, 0, 0, 1.0
-        max_lat = max(compute_partition_latency_sim(lp, pp, 1.0, bw)[0] for pp in range(len(lp) + 1))
-        search_fps = fps if fps else list(range(len(lp) + 1))
-        for pp in search_fps:
-            for cr in np.arange(0.1, 1.05, 0.02):
-                l = compute_partition_latency_sim(lp, pp, cr, bw)[0]
-                a = estimate_accuracy_after_compression(model, lp, pp, cr, base_accuracy)
-                r = -0.5 * (l / max_lat) + 0.5 * (a / base_accuracy)
-                if r > best_r:
-                    best_r, best_l, best_a, best_pp, best_cr = r, l, a, pp, cr
-
         baselines = compute_baselines(lp, bw, base_accuracy, model)
-        # 使用理论最优作为ARL-Comp结果 (RL agent评估可能因bandwidth波动而偏离)
+        # 使用RL agent实际评估结果
         baselines["ARL-Comp"] = {
-            "latency": best_l, "accuracy": best_a,
-            "pp": best_pp, "cr": round(best_cr, 3),
+            "latency": arl["latency"], "accuracy": arl["accuracy"],
+            "pp": arl["most_pp"], "cr": round(arl["avg_cr"], 3),
         }
         all_results[mt] = baselines
-
-        # 用于绘图的agent评估结果 (固定带宽)
-        arl = {"latency": best_l, "accuracy": best_a, "most_pp": best_pp,
-               "avg_pp": best_pp, "avg_cr": best_cr}
 
         print(f"\n  Results for {mt} @ BW={bw}Mbps:")
         for m, r in baselines.items():
